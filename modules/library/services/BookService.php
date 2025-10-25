@@ -2,6 +2,7 @@
 
 namespace app\modules\library\services;
 
+use app\modules\library\models\BookAuthor;
 use Yii;
 use app\modules\library\models\Book;
 use app\modules\library\models\forms\BookForm;
@@ -34,7 +35,14 @@ class BookService
     {
         return Book::find()
             ->where(['id' => $id])
+            ->one();
+    }
+
+    public function findByIdWithAuthors($id): ?Book
+    {
+        return Book::find()
             ->with('authors')
+            ->where(['id' => $id])
             ->one();
     }
 
@@ -75,9 +83,10 @@ class BookService
 
             // Save book-author relations
             if (!$isNewRecord) {
-                $this->deleteBookAuthors($book->id);
+                $this->updateBookAuthors($book->id, $form->author_ids);
+            } else {
+                $this->saveBookAuthors($book->id, $form->author_ids);
             }
-            $this->saveBookAuthors($book->id, $form->author_ids);
 
             $transaction->commit();
 
@@ -98,6 +107,25 @@ class BookService
 
             Yii::error($e->getMessage(), 'book.' . ($isNewRecord ? 'create' : 'update'));
             throw $e;
+        }
+    }
+
+    private function updateBookAuthors($bookId, $newAuthorIds)
+    {
+        $currentAuthorIds = BookAuthor::find()
+            ->select('author_id')
+            ->where(['book_id' => $bookId])
+            ->column();
+
+        $toDelete = array_diff($currentAuthorIds, $newAuthorIds);
+        $toAdd = array_diff($newAuthorIds, $currentAuthorIds);
+
+        if (!empty($toDelete)) {
+            BookAuthor::deleteAll(['book_id' => $bookId, 'author_id' => $toDelete]);
+        }
+
+        if (!empty($toAdd)) {
+            $this->saveBookAuthors($bookId, $toAdd);
         }
     }
 

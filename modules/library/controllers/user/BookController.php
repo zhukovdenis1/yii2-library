@@ -54,7 +54,7 @@ class BookController extends BaseController
 
     public function actionView($id)
     {
-        $model = $this->getBookService()->findById($id);
+        $model = $this->getBookService()->findByIdWithAuthors($id);
 
         if (!$model) {
             throw new NotFoundHttpException(Yii::t('app', 'The requested page does not exist.'));
@@ -78,6 +78,7 @@ class BookController extends BaseController
             Yii::$app->session->setFlash('error', Yii::t('app', 'Error creating book: {error}', [
                 'error' => Yii::t('app', 'Create authors first')
             ]));
+            return $this->redirect(['author/index']);
         }
 
         if ($form->load(Yii::$app->request->post())) {
@@ -109,16 +110,19 @@ class BookController extends BaseController
             throw new \yii\web\ForbiddenHttpException(Yii::t('app', 'You are not allowed to perform this action.'));
         }
 
-        $book = $this->getBookService()->findById($id);
+        $book = $this->getBookService()->findByIdWithAuthors($id);
         if (!$book) {
             throw new NotFoundHttpException(Yii::t('app', 'The requested page does not exist.'));
         }
 
-        $form = new BookForm('update', $book);
+        // Проверяем наличие авторов в системе
         $authors = $this->getAuthorService()->getAllAuthors();
+        if (empty($authors)) {
+            Yii::$app->session->setFlash('error', Yii::t('app', 'No authors available. Please create authors first.'));
+            return $this->redirect(['author/index']);
+        }
 
-        // Загружаем author_ids для формы
-        $form->author_ids = $book->getAuthors()->select('id')->column();
+        $form = new BookForm('update', $book);
 
         if ($form->load(Yii::$app->request->post())) {
             $form->imageFile = UploadedFile::getInstance($form, 'imageFile');

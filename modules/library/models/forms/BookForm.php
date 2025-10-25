@@ -4,7 +4,7 @@ namespace app\modules\library\models\forms;
 
 use Yii;
 use yii\base\Model;
-use yii\web\UploadedFile;
+use yii\helpers\ArrayHelper;
 use app\modules\library\models\Book;
 
 class BookForm extends Model
@@ -26,6 +26,12 @@ class BookForm extends Model
         $this->_scenario = $scenario;
         $this->_book = $book;
 
+        if ($scenario === 'update' && !$book) {
+            throw new \InvalidArgumentException('Book instance is required for update scenario');
+        }
+
+        parent::__construct($config);
+
         if ($book) {
             $this->id = $book->id;
             $this->title = $book->title;
@@ -35,7 +41,9 @@ class BookForm extends Model
             $this->cover_image = $book->cover_image;
         }
 
-        parent::__construct($config);
+        if ($book && $book->authors) {
+            $this->author_ids = ArrayHelper::getColumn($book->authors, 'id');
+        }
     }
 
     public function rules()
@@ -47,16 +55,16 @@ class BookForm extends Model
             ['description', 'string'],
             ['isbn', 'string', 'max' => 20],
             ['isbn', 'match', 'pattern' => '/^[\d\-]+$/', 'message' => 'ISBN can only contain numbers and dashes.'],
+            ['isbn', 'unique', 'targetClass' => Book::class,
+                'when' => function($model) {
+                    // Проверяем уникальность только для новых записей или при изменении ISBN
+                    return $model->isNewRecord ||
+                        ($model->_book && $model->isbn !== $model->_book->isbn);
+                }
+            ],
             ['author_ids', 'each', 'rule' => ['integer']],
             ['imageFile', 'file', 'skipOnEmpty' => true, 'extensions' => 'png, jpg, jpeg, gif', 'maxSize' => 1024 * 1024 * 5],
         ];
-
-        // Уникальность ISBN с учетом сценария
-        $isbnUniqueRule = ['isbn', 'unique', 'targetClass' => Book::class];
-        if ($this->_scenario === 'update' && $this->_book) {
-            $isbnUniqueRule['filter'] = ['!=', 'id', $this->_book->id];
-        }
-        $rules[] = $isbnUniqueRule;
 
         return $rules;
     }
